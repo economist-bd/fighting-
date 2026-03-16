@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <!-- মোবাইলের জন্য জুম এবং প্যানিং বন্ধ করা হয়েছে যাতে গেম খেলার সময় স্ক্রিন নড়ে না যায় -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>এপিক ফেস ব্যাটল - মোবাইল</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            -webkit-touch-callout: none; /* iOS এ লং প্রেস মেনু বন্ধ করা */
+            -webkit-user-select: none;   /* টেক্সট সিলেক্ট বন্ধ করা */
+            user-select: none;
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* ডিফল্ট ব্রাউজার সোয়াইপ বন্ধ করা */
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+            display: block;
+        }
+        
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; 
+        }
+
+        /* Health Bars */
+        .health-bar-container {
+            position: absolute;
+            width: 250px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            left: 50%;
+            margin-left: -125px; /* Center alignment */
+        }
+        #p1-health-bg { 
+            bottom: 160px; /* P1 (Sir) is at the bottom */
+        }
+        #p2-health-bg { 
+            top: 160px; 
+            transform: rotate(180deg); /* Rotated for the person sitting opposite */
+        }
+        
+        .health-bar {
+            height: 15px;
+            width: 100%;
+            background-color: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            width: 100%;
+            transition: width 0.2s ease-out;
+        }
+        #p1-health { background-color: #3b82f6; }
+        #p2-health { background-color: #ec4899; }
+
+        .player-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        #p1-name { color: #60a5fa; }
+        #p2-name { color: #f472b6; }
+
+        /* Mobile Controls */
+        .touch-btn {
+            pointer-events: auto;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            transition: opacity 0.1s;
+        }
+        .touch-btn:active { opacity: 0.6; }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 50;
+            padding: 20px;
+            text-align: center;
+        }
+        .hidden { display: none !important; }
+        
+        /* Middle Divider */
+        #middle-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 20px);
+            transform: translateY(-50%);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="middle-line"></div>
+
+    <div id="ui-layer">
+        <!-- Player 2 Health (Top) -->
+        <div class="health-bar-container" id="p2-health-bg">
+            <div class="player-name" id="p2-name">খেলোয়াড় ২ (ম্যাডাম)</div>
+            <div class="health-bar"><div class="health-fill" id="p2-health"></div></div>
+        </div>
+
+        <!-- Player 1 Health (Bottom) -->
+        <div class="health-bar-container" id="p1-health-bg">
+            <div class="player-name" id="p1-name">খেলোয়াড় ১ (মঞ্জুরুল স্যার)</div>
+            <div class="health-bar"><div class="health-fill" id="p1-health"></div></div>
+        </div>
+
+        <!-- Mobile Touch Controls -->
+        <div class="absolute inset-0 pointer-events-none z-20">
+            
+            <!-- Player 2 Controls (Top, Rotated 180deg for person sitting opposite) -->
+            <div class="absolute top-4 left-4 right-4 flex justify-between transform rotate-180 pointer-events-none">
+                <!-- Fire Button -->
+                <div class="pointer-events-auto">
+                    <button id="p2-fire" class="touch-btn w-20 h-20 rounded-full bg-pink-600/60 border-2 border-pink-400 text-white">FIRE</button>
+                </div>
+                <!-- D-Pad -->
+                <div class="grid grid-cols-3 gap-1 pointer-events-auto w-32 h-32">
+                    <div></div>
+                    <button id="p2-up" class="touch-btn bg-gray-600/60 rounded">↑</button>
+                    <div></div>
+                    <button id="p2-left" class="touch-btn bg-gray-600/60 rounded">←</button>
+                    <button id="p2-down" class="touch-btn bg-gray-600/60 rounded">↓</button>
+                    <button id="p2-right" class="touch-btn bg-gray-600/60 rounded">→</button>
+                    <div></div><div></div><div></div>
+                </div>
+            </div>
+
+            <!-- Player 1 Controls (Bottom) -->
+            <div class="absolute bottom-4 left-4 right-4 flex justify-between pointer-events-none items-end">
+                <!-- D-Pad -->
+                <div class="grid grid-cols-3 gap-1 pointer-events-auto w-32 h-32">
+                    <div></div>
+                    <button id="p1-up" class="touch-btn bg-gray-600/60 rounded">↑</button>
+                    <div></div>
+                    <button id="p1-left" class="touch-btn bg-gray-600/60 rounded">←</button>
+                    <button id="p1-down" class="touch-btn bg-gray-600/60 rounded">↓</button>
+                    <button id="p1-right" class="touch-btn bg-gray-600/60 rounded">→</button>
+                    <div></div><div></div><div></div>
+                </div>
+                <!-- Fire Button -->
+                <div class="pointer-events-auto">
+                    <button id="p1-fire" class="touch-btn w-20 h-20 rounded-full bg-blue-600/60 border-2 border-blue-400 text-white">FIRE</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen">
+        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-pink-500 mb-4">মোবাইল স্প্লিট-স্ক্রিন ব্যাটল</h1>
+        <p class="text-gray-300 mb-6 text-sm">ফোনটি টেবিলের ওপর রাখুন। দুই প্রান্তে দুজন বসুন!</p>
+        <button id="start-btn" class="px-8 py-3 bg-indigo-600 text-white font-bold rounded-full text-lg shadow-[0_0_15px_rgba(79,70,229,0.5)]">
+            খেলা শুরু করুন
+        </button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 id="winner-text" class="text-4xl font-extrabold mb-4"></h1>
+        <div id="winner-img-container" class="w-32 h-32 rounded-full overflow-hidden border-4 border-white mb-6">
+            <img id="winner-img" src="" alt="Winner" class="w-full h-full object-cover">
+        </div>
+        <button id="restart-btn" class="px-6 py-3 bg-gray-700 text-white font-bold rounded-full text-lg">
+            আবার খেলুন
+        </button>
+    </div>
+</div>
+
+<script>
+    // --- ছবির লিংক ---
+    const img1Url = '1000141051.jpg'; // Player 1 (Bottom)
+    const img2Url = '1000141057.webp'; // Player 2 (Top)
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // UI Elements
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const p1HealthBar = document.getElementById('p1-health');
+    const p2HealthBar = document.getElementById('p2-health');
+
+    const p1Image = new Image(); p1Image.src = img1Url;
+    const p2Image = new Image(); p2Image.src = img2Url;
+
+    let animationId;
+    let gameActive = false;
+    
+    // Virtual Keys
+    const keys = {
+        p1Up: false, p1Down: false, p1Left: false, p1Right: false, p1Shoot: false,
+        p2Up: false, p2Down: false, p2Left: false, p2Right: false, p2Shoot: false
+    };
+
+    // Touch Event Setup
+    function bindTouch(btnId, keyName) {
+        const btn = document.getElementById(btnId);
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; btn.style.opacity = '0.5'; });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; btn.style.opacity = '1'; });
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); keys[keyName] = false; btn.style.opacity = '1'; });
+    }
+
+    // Bind P1 (Bottom)
+    bindTouch('p1-up', 'p1Up');
+    bindTouch('p1-down', 'p1Down');
+    bindTouch('p1-left', 'p1Left');
+    bindTouch('p1-right', 'p1Right');
+    bindTouch('p1-fire', 'p1Shoot');
+
+    // Bind P2 (Top, Controls rotated 180deg)
+    // For P2 (sitting opposite), their 'Up' means moving towards center (Down in our screen coords)
+    bindTouch('p2-up', 'p2Up');
+    bindTouch('p2-down', 'p2Down');
+    bindTouch('p2-left', 'p2Left');
+    bindTouch('p2-right', 'p2Right');
+    bindTouch('p2-fire', 'p2Shoot');
+
+    class Player {
+        constructor(x, y, color, image, id) {
+            this.id = id;
+            // Responsive radius based on screen width
+            this.radius = Math.min(window.innerWidth * 0.08, 40); 
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.image = image;
+            this.speed = 4;
+            this.maxHp = 100;
+            this.hp = this.maxHp;
+            this.cooldown = 0;
+            this.maxCooldown = 20; 
+        }
+
+        draw() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = this.color;
+            ctx.stroke();
+            ctx.clip();
+            
+            // Draw image. If P2, rotate it so the person sitting opposite sees it straight
+            if(this.id === 'p2') {
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.PI);
+                ctx.drawImage(this.image, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+            } else {
+                ctx.drawImage(this.image, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+            }
+            
+            ctx.restore();
+        }
+
+        update() {
+            if (this.id === 'p1') {
+                if (keys.p1Up && this.y - this.radius > canvas.height / 2) this.y -= this.speed;
+                if (keys.p1Down && this.y + this.radius < canvas.height) this.y += this.speed;
+                if (keys.p1Left && this.x - this.radius > 0) this.x -= this.speed;
+                if (keys.p1Right && this.x + this.radius < canvas.width) this.x += this.speed;
+                if (keys.p1Shoot && this.cooldown === 0) {
+                    this.shoot(0, -10); // Shoot UP
+                    this.cooldown = this.maxCooldown;
+                }
+            } else if (this.id === 'p2') {
+                // P2 movement is relative to their rotated perspective
+                if (keys.p2Up && this.y + this.radius < canvas.height / 2) this.y += this.speed; // Forward
+                if (keys.p2Down && this.y - this.radius > 0) this.y -= this.speed; // Backward
+                if (keys.p2Left && this.x + this.radius < canvas.width) this.x += this.speed; // Left
+                if (keys.p2Right && this.x - this.radius > 0) this.x -= this.speed; // Right
+                if (keys.p2Shoot && this.cooldown === 0) {
+                    this.shoot(0, 10); // Shoot DOWN
+                    this.cooldown = this.maxCooldown;
+                }
+            }
+
+            if (this.cooldown > 0) this.cooldown--;
+            this.draw();
+        }
+
+        shoot(vx, vy) {
+            projectiles.push(new Projectile(this.x, this.y + (vy > 0 ? this.radius : -this.radius), vx, vy, this.color, this.id));
+        }
+    }
+
+    class Projectile {
+        constructor(x, y, vx, vy, color, owner) {
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+            this.color = color; this.owner = owner; this.radius = 5;
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = this.color;
+        }
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.draw(); ctx.shadowBlur = 0;
+        }
+    }
+
+    class Particle {
+        constructor(x, y, color) {
+            this.x = x; this.y = y; this.color = color;
+            this.velocity = { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6 };
+            this.alpha = 1; this.size = Math.random() * 3 + 1;
+        }
+        draw() {
+            ctx.save(); ctx.globalAlpha = this.alpha; ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = this.color; ctx.fill(); ctx.restore();
+        }
+        update() {
+            this.x += this.velocity.x; this.y += this.velocity.y;
+            this.alpha -= 0.05; this.draw();
+        }
+    }
+
+    let player1, player2, projectiles = [], particles = [], stars = [];
+
+    function initStars() {
+        stars = [];
+        for (let i = 0; i < 50; i++) {
+            stars.push({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+                size: Math.random() * 1.5, speedY: (Math.random() * 1 + 0.5) * (Math.random() > 0.5 ? 1 : -1)
+            });
+        }
+    }
+
+    function drawStars() {
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        stars.forEach(star => {
+            ctx.beginPath(); ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2); ctx.fill();
+            star.y += star.speedY;
+            if (star.y < 0) star.y = canvas.height;
+            if (star.y > canvas.height) star.y = 0;
+        });
+    }
+
+    function createExplosion(x, y, color) {
+        for (let i = 0; i < 15; i++) particles.push(new Particle(x, y, color));
+    }
+
+    function checkCollision(obj1, obj2) {
+        const dx = obj1.x - obj2.x; const dy = obj1.y - obj2.y;
+        return Math.sqrt(dx * dx + dy * dy) < obj1.radius + obj2.radius;
+    }
+
+    function updateHealthUI() {
+        p1HealthBar.style.width = `${Math.max(0, player1.hp)}%`;
+        p2HealthBar.style.width = `${Math.max(0, player2.hp)}%`;
+    }
+
+    function initGame() {
+        resizeCanvas();
+        // P1 at bottom, P2 at top
+        player1 = new Player(canvas.width / 2, canvas.height - 120, '#3b82f6', p1Image, 'p1');
+        player2 = new Player(canvas.width / 2, 120, '#ec4899', p2Image, 'p2');
+        projectiles = []; particles = []; initStars(); updateHealthUI(); gameActive = true;
+    }
+
+    function endGame(winnerName, winnerColor, winnerImgSrc) {
+        gameActive = false;
+        gameOverScreen.classList.remove('hidden');
+        document.getElementById('winner-text').innerText = `${winnerName} জিতেছে!`;
+        document.getElementById('winner-text').style.color = winnerColor;
+        document.getElementById('winner-img').src = winnerImgSrc;
+        document.getElementById('winner-img-container').style.borderColor = winnerColor;
+    }
+
+    function animate() {
+        if (!gameActive) return;
+        animationId = requestAnimationFrame(animate);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawStars();
+
+        player1.update(); player2.update();
+
+        projectiles.forEach((p, index) => {
+            p.update();
+            if (p.owner === 'p1' && checkCollision(p, player2)) {
+                player2.hp -= 5; createExplosion(p.x, p.y, p.color); projectiles.splice(index, 1); updateHealthUI();
+            } else if (p.owner === 'p2' && checkCollision(p, player1)) {
+                player1.hp -= 5; createExplosion(p.x, p.y, p.color); projectiles.splice(index, 1); updateHealthUI();
+            } else if (p.y < 0 || p.y > canvas.height) {
+                projectiles.splice(index, 1);
+            }
+        });
+
+        particles.forEach((p, index) => {
+            if (p.alpha <= 0) particles.splice(index, 1);
+            else p.update();
+        });
+
+        if (player1.hp <= 0) endGame('খেলোয়াড় ২', '#ec4899', img2Url);
+        else if (player2.hp <= 0) endGame('খেলোয়াড় ১', '#3b82f6', img1Url);
+    }
+
+    startBtn.addEventListener('click', () => { startScreen.classList.add('hidden'); initGame(); animate(); });
+    restartBtn.addEventListener('click', () => { gameOverScreen.classList.add('hidden'); initGame(); animate(); });
+
+</script>
+</body>
+</html>
+
+
